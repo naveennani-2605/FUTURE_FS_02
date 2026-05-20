@@ -1,0 +1,50 @@
+[
+  {
+    "name": "Ravi Teja Annam",
+    "email": "raviteja.annam@vanguardtech.com",
+    "source": "Website",
+    "status": "New"
+  },
+  {
+    "name": "Sravani Kondapalli",
+    "email": "sravani.k@vertexline.co",
+    "source": "Facebook",
+    "status": "Contacted"
+  },
+  {
+    "name": "Kalyan Ram Chebrolu",
+    "email": "kalyan.ramc@apexmedia.io",
+    "source": "Referral",
+    "status": "Converted"
+  },
+  {
+    "name": "Harika Pendyala",
+    "email": "hpendyala@novasolutions.co",
+    "source": "Facebook",
+    "status": "Contacted"
+  },
+  {
+    "name": "Srinivas Rao Guntur",
+    "email": "srinivas.g@stratabound.io",
+    "source": "Referral",
+    "status": "New"
+  },
+  {
+    "name": "Ananya Yelamanchili",
+    "email": "ananya.y@luminagroup.co",
+    "source": "Facebook",
+    "status": "New"
+  },
+  {
+    "name": "Venkatesh Mylavarapu",
+    "email": "vmylavarapu@ironwoodcorp.io",
+    "source": "Referral",
+    "status": "Contacted"
+  },
+  {
+    "name": "Ravi Teja Annam",
+    "email": "raviteja.annam@vanguardtech.com",
+    "source": "Manual Input",
+    "status": "New"
+  }
+]
