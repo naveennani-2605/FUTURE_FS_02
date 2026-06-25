@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, RefreshCw, Plus, X, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, Plus, X, Trash2 } from 'lucide-react';
 import API from '../api';
 import './LeadsList.css';
 
@@ -8,7 +8,15 @@ const LeadsList = () => {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filter, setFilter] = useState('All');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: 25,
+    pages: 1
+  });
 
   // New Lead Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -48,7 +56,7 @@ const LeadsList = () => {
         status: 'New',
         notes: ''
       });
-      fetchLeads();
+      fetchLeads(1);
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.message || 'Failed to add lead. Please try again.');
@@ -57,21 +65,42 @@ const LeadsList = () => {
     }
   };
 
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async (requestedPage = page) => {
     setLoading(true);
     try {
-      const res = await API.get('/leads');
-      setLeads(res.data);
+      const res = await API.get('/leads', {
+        params: {
+          page: requestedPage,
+          limit: pagination.limit,
+          search: debouncedSearch || undefined,
+          status: filter === 'All' ? undefined : filter
+        }
+      });
+      const nextLeads = Array.isArray(res.data) ? res.data : res.data.data;
+      setLeads(nextLeads || []);
+      if (res.data.pagination) {
+        setPagination(res.data.pagination);
+        setPage(res.data.pagination.page);
+      }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [debouncedSearch, filter, page, pagination.limit]);
 
   useEffect(() => {
-    fetchLeads();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+      setPage(1);
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    fetchLeads(page);
+  }, [fetchLeads, page]);
 
   const handleDeleteLead = async (id, e) => {
     e.preventDefault();
@@ -79,7 +108,7 @@ const LeadsList = () => {
     if (window.confirm('Are you sure you want to delete this lead?')) {
       try {
         await API.delete(`/leads/${id}`);
-        fetchLeads();
+        fetchLeads(page);
       } catch (err) {
         console.error('Failed to delete lead:', err);
         alert('Failed to delete lead. Please try again.');
@@ -87,12 +116,15 @@ const LeadsList = () => {
     }
   };
 
-  const filteredLeads = leads.filter(lead => {
-    const matchesSearch = lead.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          lead.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filter === 'All' || lead.status === filter;
-    return matchesSearch && matchesFilter;
-  });
+  const handleFilterChange = (e) => {
+    setFilter(e.target.value);
+    setPage(1);
+  };
+
+  const goToPage = (nextPage) => {
+    if (nextPage < 1 || nextPage > pagination.pages || nextPage === page) return;
+    setPage(nextPage);
+  };
 
   return (
     <div className="leads-container glass-panel">
@@ -128,7 +160,7 @@ const LeadsList = () => {
           <select 
             className="input-field"
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={handleFilterChange}
           >
             <option value="All">All Statuses</option>
             <option value="New">New</option>
@@ -155,12 +187,12 @@ const LeadsList = () => {
               <tr>
                 <td colSpan="6" className="text-center py-4">Loading leads...</td>
               </tr>
-            ) : filteredLeads.length === 0 ? (
+            ) : leads.length === 0 ? (
               <tr>
                 <td colSpan="6" className="text-center py-4">No leads found.</td>
               </tr>
             ) : (
-              filteredLeads.map(lead => (
+              leads.map(lead => (
                 <tr key={lead._id}>
                   <td className="font-medium">{lead.name}</td>
                   <td className="text-secondary">{lead.email}</td>
@@ -191,6 +223,35 @@ const LeadsList = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="pagination-bar">
+        <span className="text-secondary">
+          Showing {leads.length} of {pagination.total} leads
+        </span>
+        <div className="pagination-actions">
+          <button
+            type="button"
+            className="pager-btn"
+            onClick={() => goToPage(page - 1)}
+            disabled={page <= 1 || loading}
+            aria-label="Previous page"
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <span className="page-count">
+            Page {pagination.page} of {pagination.pages}
+          </span>
+          <button
+            type="button"
+            className="pager-btn"
+            onClick={() => goToPage(page + 1)}
+            disabled={page >= pagination.pages || loading}
+            aria-label="Next page"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Add Custom Lead Modal */}

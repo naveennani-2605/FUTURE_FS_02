@@ -1,5 +1,5 @@
 import { Outlet, useNavigate, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, LogOut, Menu, Settings as SettingsIcon } from 'lucide-react';
+import { LayoutDashboard, Users, LogOut, Menu, Settings as SettingsIcon, Sparkles } from 'lucide-react';
 import API from '../api';
 import './Dashboard.css';
 import { useState, useEffect } from 'react';
@@ -78,10 +78,19 @@ const Dashboard = () => {
           <button 
             className="mobile-menu-btn"
             onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label="Open navigation"
           >
             <Menu size={24} />
           </button>
+          <div className="workspace-title">
+            <span className="workspace-kicker">
+              <Sparkles size={15} />
+              Sales workspace
+            </span>
+            <h1>{location.pathname.startsWith('/settings') ? 'Settings' : 'Lead pipeline'}</h1>
+          </div>
           <div className="topbar-right">
+            <span className="sync-pill">Live CRM</span>
             <Link to="/settings" className="admin-profile">
               <div className="avatar">
                 {username ? username.slice(0, 2).toUpperCase() : 'US'}

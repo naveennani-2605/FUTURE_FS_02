@@ -1,9 +1,33 @@
 const express = require('express');
 const router = express.Router();
-const fs = require('fs');
+const fs = require('fs/promises');
 const path = require('path');
 const Lead = require('../models/Lead');
 const auth = require('../middleware/auth');
+
+const DEFAULT_LIMIT = 25;
+const MAX_LIMIT = 100;
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const persistLeadForSeed = async ({ name, email, source, status }) => {
+  try {
+    const leadsPath = path.join(__dirname, '../leads.json');
+    let leadsList = [];
+
+    try {
+      const file = await fs.readFile(leadsPath, 'utf8');
+      leadsList = JSON.parse(file);
+    } catch (readErr) {
+      if (readErr.code !== 'ENOENT') throw readErr;
+    }
+
+    leadsList.push({ name, email, source, status });
+    await fs.writeFile(leadsPath, JSON.stringify(leadsList, null, 2), 'utf8');
+  } catch (fsErr) {
+    console.error('Error saving to seed leads list:', fsErr.message);
+  }
+};
 
 // @route   POST api/leads
 // @desc    Create a new lead (from contact form)
@@ -11,47 +35,31 @@ const auth = require('../middleware/auth');
 router.post('/', async (req, res) => {
   try {
     const { name, email, source, status, notes } = req.body;
+
+    if (!name || !email) {
+      return res.status(400).json({ message: 'Name and email are required' });
+    }
     
-    const initialNotes = notes ? [{ text: notes }] : [];
+    const initialNotes = notes?.trim() ? [{ text: notes.trim() }] : [];
+    const leadSource = source?.trim() || 'Manual Input';
+    const leadStatus = status || 'New';
     
     const newLead = new Lead({
-      name,
-      email,
-      source: source || 'Manual Input',
-      status: status || 'New',
+      name: name.trim(),
+      email: email.trim(),
+      source: leadSource,
+      status: leadStatus,
       notes: initialNotes
     });
 
     const lead = await newLead.save();
 
-    // Auto-save to backend/leads.json for seed persistence
-    try {
-      const leadsPath = path.join(__dirname, '../leads.json');
-      let leadsList = [];
-      if (fs.existsSync(leadsPath)) {
-        leadsList = JSON.parse(fs.readFileSync(leadsPath, 'utf8'));
-      } else {
-        // Initial defaults
-        leadsList = [
-          { name: 'Ravi Teja Annam', email: 'raviteja.annam@vanguardtech.com', source: 'Website', status: 'New' },
-          { name: 'Sravani Kondapalli', email: 'sravani.k@vertexline.co', source: 'Facebook', status: 'Contacted' },
-          { name: 'Kalyan Ram Chebrolu', email: 'kalyan.ramc@apexmedia.io', source: 'Referral', status: 'Converted' },
-          { name: 'Harika Pendyala', email: 'hpendyala@novasolutions.co', source: 'Facebook', status: 'Contacted' },
-          { name: 'Srinivas Rao Guntur', email: 'srinivas.g@stratabound.io', source: 'Referral', status: 'New' },
-          { name: 'Ananya Yelamanchili', email: 'ananya.y@luminagroup.co', source: 'Facebook', status: 'New' },
-          { name: 'Venkatesh Mylavarapu', email: 'vmylavarapu@ironwoodcorp.io', source: 'Referral', status: 'Contacted' }
-        ];
-      }
-      leadsList.push({
-        name,
-        email,
-        source: source || 'Manual Input',
-        status: status || 'New'
-      });
-      fs.writeFileSync(leadsPath, JSON.stringify(leadsList, null, 2), 'utf8');
-    } catch (fsErr) {
-      console.error('Error saving to seed leads list:', fsErr.message);
-    }
+    persistLeadForSeed({
+      name: lead.name,
+      email: lead.email,
+      source: lead.source,
+      status: lead.status
+    });
 
     res.status(201).json(lead);
   } catch (err) {
@@ -65,8 +73,39 @@ router.post('/', async (req, res) => {
 // @access  Private
 router.get('/', auth, async (req, res) => {
   try {
-    const leads = await Lead.find().sort({ createdAt: -1 });
-    res.json(leads);
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || DEFAULT_LIMIT, 1), MAX_LIMIT);
+    const skip = (page - 1) * limit;
+    const query = {};
+
+    if (req.query.status && req.query.status !== 'All') {
+      query.status = req.query.status;
+    }
+
+    if (req.query.search) {
+      const pattern = new RegExp(escapeRegex(req.query.search.trim()), 'i');
+      query.$or = [{ name: pattern }, { email: pattern }, { source: pattern }];
+    }
+
+    const [leads, total] = await Promise.all([
+      Lead.find(query)
+        .select('name email source status createdAt updatedAt')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Lead.countDocuments(query)
+    ]);
+
+    res.json({
+      data: leads,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.max(Math.ceil(total / limit), 1)
+      }
+    });
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');
@@ -78,7 +117,7 @@ router.get('/', auth, async (req, res) => {
 // @access  Private
 router.get('/:id', auth, async (req, res) => {
   try {
-    const lead = await Lead.findById(req.params.id);
+    const lead = await Lead.findById(req.params.id).lean();
     if (!lead) {
       return res.status(404).json({ message: 'Lead not found' });
     }
